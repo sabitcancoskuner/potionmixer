@@ -10,7 +10,7 @@ GameObject:
   m_Component:
   - component: {fileID: 3774294889145498075}
   - component: {fileID: 8833546869618758636}
-  - component: {fileID: 6708511514372157695}
+  - component: {fileID: 9088206145845515129}
   m_Layer: 0
   m_Name: Matchable Object
   m_TagString: Untagged
@@ -88,7 +88,7 @@ SpriteRenderer:
   m_WasSpriteAssigned: 1
   m_MaskInteraction: 0
   m_SpriteSortPoint: 0
---- !u!114 &6708511514372157695
+--- !u!114 &9088206145845515129
 MonoBehaviour:
   m_ObjectHideFlags: 0
   m_CorrespondingSourceObject: {fileID: 0}
@@ -100,5 +100,18 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: bf1cfb7cd65fed14493295a73690a3d9, type: 3}
   m_Name: 
   m_EditorClassIdentifier: 
-  speed: 1
+  speed: 2
+  rb: {fileID: 0}
+  powerupType: 0
+  sprites:
+  - {fileID: 4787099019175436215, guid: ceb1ad00dc6fddb42961701cb696c90d, type: 3}
+  - {fileID: -4942979472324603159, guid: ceb1ad00dc6fddb42961701cb696c90d, type: 3}
+  - {fileID: 293421754252265406, guid: ceb1ad00dc6fddb42961701cb696c90d, type: 3}
+  - {fileID: -7564174536005171853, guid: ceb1ad00dc6fddb42961701cb696c90d, type: 3}
+  - {fileID: -4656935220366820251, guid: ceb1ad00dc6fddb42961701cb696c90d, type: 3}
+  - {fileID: 4941852005989893768, guid: ceb1ad00dc6fddb42961701cb696c90d, type: 3}
+  horizontalRocketSprite: {fileID: 786335057477283652, guid: 43a028d39ce2e8c4bb50787498e24656, type: 3}
+  verticalRocketSprite: {fileID: 1681691430047060713, guid: 43a028d39ce2e8c4bb50787498e24656, type: 3}
+  discoBallSprite: {fileID: 4002353280763352564, guid: 43a028d39ce2e8c4bb50787498e24656, type: 3}
+  bombSprite: {fileID: 8311964670157701414, guid: 43a028d39ce2e8c4bb50787498e24656, type: 3}
   gridPosition: {x: 0, y: 0}

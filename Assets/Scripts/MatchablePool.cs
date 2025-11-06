@@ -3,18 +3,20 @@ using UnityEngine;
 public class MatchablePool : ObjectPool<Matchable>
 {
     [SerializeField] private int numberOfTypes;
-    [SerializeField] private Sprite[] sprites;
 
     public void RandomizeType(Matchable matchable)
     {
         int randomType = Random.Range(0, numberOfTypes);
-        matchable.SetType(randomType, sprites[randomType]);
+        matchable.SetType(randomType);
     }
 
     public Matchable GetRandomMatchable()
     {
         Matchable matchable = GetPooledObject();
         RandomizeType(matchable);
+
+        // Ensure collider is enabled for new matchables
+        // matchable.EnableCollider();
         
         return matchable;
     }
@@ -23,8 +25,9 @@ public class MatchablePool : ObjectPool<Matchable>
     {
         int currentType = matchable.Type;
         int newType = (currentType + 1) % numberOfTypes;
-        matchable.SetType(newType, sprites[newType]);
+        matchable.SetType(newType);
 
         return newType;
     }
+
 }

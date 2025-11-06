@@ -23,6 +23,6 @@ public class GameManager : Singleton<GameManager>
 
         yield return null;
 
-        StartCoroutine(matchableGrid.PopulateGrid());
+        StartCoroutine(matchableGrid.PopulateGrid(initialPopulation: true));
     }
 }

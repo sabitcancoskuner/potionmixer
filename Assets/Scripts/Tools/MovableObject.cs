@@ -4,15 +4,18 @@ using UnityEngine;
 public class MovableObject : MonoBehaviour
 {
     private Vector3 from, to;
-    private float howFar;
+    private float howFar = 0;
     [SerializeField] private float speed = 1f;
+    [SerializeField] protected Rigidbody2D rb;
 
     protected bool idle = true;
 
     public bool Idle
     {
         get { return idle; }
+        set { idle = value; }
     }
+
 
     public IEnumerator MoveToPosition(Vector3 targetPosition)
     {
@@ -30,9 +33,11 @@ public class MovableObject : MonoBehaviour
         while (howFar < 1f)
         {
             howFar += Time.deltaTime * speed;
-            transform.position = Vector3.Lerp(from, to, Easing(howFar));
+            transform.position = Vector3.LerpUnclamped(from, to, Easing(howFar));
             yield return null;
         }
+
+        transform.position = to;
 
         idle = true;
     }
@@ -53,11 +58,13 @@ public class MovableObject : MonoBehaviour
         while (howFar < 1f)
         {
             howFar += Time.deltaTime * speed;
-            transform.position = Vector3.Lerp(from, to, Easing(howFar));
+            transform.position = Vector3.LerpUnclamped(from, to, Easing(howFar));
 
             to = targetTransform.position;
             yield return null;
         }
+
+        transform.position = targetTransform.position;
 
         idle = true;
     }

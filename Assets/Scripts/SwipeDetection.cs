@@ -43,29 +43,70 @@ public class SwipeDetection : MonoBehaviour
         endTime = time;
         Vector3 direction = endPosition - startPosition;
         Vector3 direction2D = new Vector2(direction.x, direction.y).normalized;
-        SwipeDirection(direction2D);
+        Vector2Int swipeDirection = GetSwipeDirection(direction2D);
+        HandleSwipe(swipeDirection);
     }
 
-    private void SwipeDirection(Vector2 direction)
+    private Vector2Int GetSwipeDirection(Vector2 direction)
     {
         if (Vector2.Dot(Vector2.up, direction) > directionThreshold)
         {
-            Debug.Log("Swipe Up");
+            // Debug.Log("Swipe Up");
+            return Vector2Int.up;
         }
         else if (Vector2.Dot(Vector2.down, direction) > directionThreshold)
         {
-            Debug.Log("Swipe Down");
+            // Debug.Log("Swipe Down");
+            return Vector2Int.down;
         }
         else if (Vector2.Dot(Vector2.left, direction) > directionThreshold)
         {
-            Debug.Log("Swipe Left");
+            // Debug.Log("Swipe Left");
+            return Vector2Int.left;
         }
         else if (Vector2.Dot(Vector2.right, direction) > directionThreshold)
         {
-            Debug.Log("Swipe Right");
+            // Debug.Log("Swipe Right");
+            return Vector2Int.right;
         }
 
-        Debug.DrawLine(startPosition, endPosition, Color.red, 3.0f);
+        return Vector2Int.zero; // no swipe detected
+
+    }
+
+    private void HandleSwipe(Vector2Int direction)
+    {
+        if (Vector3.Distance(startPosition, endPosition) >= minSwipeDistance && (endTime - startTime) <= maxSwipeTime)
+        {
+            // Swipe detected in the 'direction'
+            // Implement your logic here based on the swipe direction
+            Vector2Int touchPosition = new Vector2Int(4, 4);
+            touchPosition.x += CustomRound(startPosition.x);
+            touchPosition.y += CustomRound(startPosition.y);
+            StartCoroutine(MatchManager.Instance.HandleObjectSwap(touchPosition, direction));
+        }
+        // Not swiped but touched at that position
+        else
+        {
+            Vector2Int touchPosition = new Vector2Int(4, 4);
+            touchPosition.x += CustomRound(startPosition.x);
+            touchPosition.y += CustomRound(startPosition.y);
+            StartCoroutine(MatchManager.Instance.HandleObjectTouch(touchPosition));
+        }
+    }
+
+    private int CustomRound(float value)
+    {
+        if (value >= 0)
+        {
+            // For positive numbers: round down if decimal < 0.5, round up if >= 0.5
+            return Mathf.FloorToInt(value + 0.5f);
+        }
+        else
+        {
+            // For negative numbers: round up (toward zero) if decimal < 0.5, round down (away from zero) if >= 0.5
+            return Mathf.CeilToInt(value - 0.5f);
+        }
     }
 
 

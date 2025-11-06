@@ -1,16 +1,20 @@
 using System.Collections;
 using System.Collections.Generic;
 using UnityEngine;
+using Random = UnityEngine.Random;
 
 public class MatchableGrid : GridSystem<Matchable>
 {
-    [SerializeField] private Vector3 offScreenSpawnOffset;
-
     private MatchablePool matchablePool;
+
+    private List<Matchable> possibleMoves;
+    
+    private bool isProcessing = false;
 
     private void Start()
     {
         matchablePool = (MatchablePool)MatchablePool.Instance;
+        possibleMoves = new List<Matchable>();
     }
 
     public IEnumerator PopulateGrid(bool allowMatches = false, bool initialPopulation = false)
@@ -19,37 +23,79 @@ public class MatchableGrid : GridSystem<Matchable>
         Matchable newMatchable;
         Vector3 onScreenPosition;
 
-        for (int y = 0; y < Dimensions.y; y++)
+        // Spawn matchables column by column to get proper staggered heights
+        for (int x = 0; x < Dimensions.x; x++)
         {
-            for (int x = 0; x < Dimensions.x; x++)
+            int spawnHeight = 0; // Track how high above the grid to spawn in this column
+            
+            for (int y = 0; y < Dimensions.y; y++)
             {
                 if (IsPositionEmpty(x, y))
                 {
                     newMatchable = matchablePool.GetRandomMatchable();
-                    onScreenPosition = transform.position + new Vector3(x, y);
-                    newMatchable.transform.position = onScreenPosition; 
+                    
+                    if (initialPopulation)
+                    {
+                        // Place directly on grid for initial population
+                        onScreenPosition = transform.position + new Vector3(x, y, 0);
+                        newMatchable.transform.position = onScreenPosition;
+                    }
+                    else
+                    {
+                        // Spawn above the grid, stacked by spawn height
+                        onScreenPosition = transform.position + new Vector3(x, Dimensions.y + spawnHeight, 0);
+                        newMatchable.transform.position = onScreenPosition;
+                        spawnHeight++; // Next empty spot in this column spawns higher
+                    }
 
                     newMatchable.gameObject.SetActive(true);
-
                     newMatchable.gridPosition = new Vector2Int(x, y);
-
                     SetObjectAtPosition(newMatchable, x, y);
-
                     newMatchables.Add(newMatchable);
 
-                    int type = newMatchable.Type;
-
-                    while (!allowMatches && HasMatchAtPosition(x, y, type))
+                    // Avoid matches if requested
+                    if (!allowMatches)
                     {
-                        if (matchablePool.NextType(newMatchable) == type)
+                        int type = newMatchable.Type;
+                        while (HasMatchAtPosition(x, y, type))
                         {
-                            Debug.LogWarning("All matchable types result in a match. Cannot avoid matches.");
-                            Debug.Break();
-                            break;
+                            if (matchablePool.NextType(newMatchable) == type)
+                            {
+                                Debug.LogWarning("All matchable types result in a match. Cannot avoid matches.");
+                                break;
+                            }
                         }
                     }
                 }
             }
+        } 
+
+        // Start all matchables moving to their grid positions
+        if (!initialPopulation)
+        {
+            object fallKey = new object();
+            int matchableIndex = 0;
+            foreach (Matchable matchable in newMatchables)
+            {
+                Vector3 targetPosition = transform.position + new Vector3(matchable.gridPosition.x, matchable.gridPosition.y, 0);
+                CoroutineManager.Instance.StartTrackedCoroutine(matchable.MoveWithPhysics(targetPosition), fallKey);
+                
+                // Add a small stagger delay between each matchable spawning
+                // This creates a natural cascading drop effect
+                matchableIndex++;
+                if (matchableIndex < newMatchables.Count)
+                {
+                    yield return new WaitForSeconds(0.02f); // Small delay between each matchable
+                }
+            }
+            
+            // Wait for all matchables to finish falling
+            yield return CoroutineManager.Instance.WaitForAll(fallKey);
+        }
+
+        if (initialPopulation)
+        {
+            CheckPossibleMoves();
         }
 
         yield return null;
@@ -59,16 +105,16 @@ public class MatchableGrid : GridSystem<Matchable>
     {
         // Check horizontal
         int horizontalMatchCount = 0;
-        horizontalMatchCount += CountMatchesInDirection(GetObjecAtPosition(x, y), Vector2Int.left);
-        horizontalMatchCount += CountMatchesInDirection(GetObjecAtPosition(x, y), Vector2Int.right);
+        horizontalMatchCount += CountMatchesInDirection(GetObjectAtPosition(x, y), Vector2Int.left);
+        horizontalMatchCount += CountMatchesInDirection(GetObjectAtPosition(x, y), Vector2Int.right);
 
         if (horizontalMatchCount >= 2)
             return true;
 
         // Check vertical
         int verticalMatchCount = 0;
-        verticalMatchCount += CountMatchesInDirection(GetObjecAtPosition(x, y), Vector2Int.up);
-        verticalMatchCount += CountMatchesInDirection(GetObjecAtPosition(x, y), Vector2Int.down);
+        verticalMatchCount += CountMatchesInDirection(GetObjectAtPosition(x, y), Vector2Int.up);
+        verticalMatchCount += CountMatchesInDirection(GetObjectAtPosition(x, y), Vector2Int.down);
 
         if (verticalMatchCount >= 2)
             return true;
@@ -81,7 +127,7 @@ public class MatchableGrid : GridSystem<Matchable>
         int matchCount = 0;
         Vector2Int checkPosition = matchable.gridPosition + direction;
 
-        while (IsWithinBounds(checkPosition) && !IsPositionEmpty(checkPosition) && GetObjecAtPosition(checkPosition).Type == matchable.Type)
+        while (IsWithinBounds(checkPosition) && !IsPositionEmpty(checkPosition) && GetObjectAtPosition(checkPosition).Type == matchable.Type)
         {
             matchCount++;
             checkPosition += direction;
@@ -92,16 +138,55 @@ public class MatchableGrid : GridSystem<Matchable>
 
     public IEnumerator TrySwapping(Matchable[] toBeSwapped)
     {
-        // Make a copy of what will be swapped so player can keep swapping while checking for matches
-        Matchable[] copies = new Matchable[2];
-        copies[0] = toBeSwapped[0];
-        copies[1] = toBeSwapped[1];
-
-        // yield until matchable animate swapping
-        yield return StartCoroutine(SwapMatchables(copies));
-
-        // Check for matches
+        if (isProcessing) yield break;
+        isProcessing = true;
         
+        try
+        {
+            // Make a copy of what will be swapped so player can keep swapping while checking for matches
+            Matchable[] copies = new Matchable[2];
+            copies[0] = toBeSwapped[0];
+            copies[1] = toBeSwapped[1];
+
+            HintIndicator.Instance.CancelHint();
+
+            // yield until matchable animate swapping
+            yield return StartCoroutine(SwapMatchables(copies));
+
+            // Check for matches
+            Match[] matches = new Match[2];
+            matches[0] = GetMatch(copies[0]);
+            matches[1] = GetMatch(copies[1]);
+
+            if (matches[0] != null || matches[1] != null)
+            {
+                object matchKey = new object();
+                
+                if (matches[0] != null)
+                {
+                    CoroutineManager.Instance.StartTrackedCoroutine(MatchManager.Instance.ResolveMatch(matches[0]), matchKey);
+                }
+                if (matches[1] != null)
+                {
+                    CoroutineManager.Instance.StartTrackedCoroutine(MatchManager.Instance.ResolveMatch(matches[1]), matchKey);
+                }
+                
+                // Wait for both matches to complete
+                yield return CoroutineManager.Instance.WaitForAll(matchKey);
+                yield return StartCoroutine(FillAndScanGrid());
+            }
+            else
+            {
+                // If no matches, swap back
+                yield return StartCoroutine(SwapMatchables(copies));
+            }
+
+            CheckPossibleMoves();
+        }
+        finally
+        {
+            isProcessing = false;
+        }
     }
 
     private IEnumerator SwapMatchables(Matchable[] toBeSwapped)
@@ -126,7 +211,7 @@ public class MatchableGrid : GridSystem<Matchable>
 
     private Match GetMatch(Matchable matchable)
     {
-        Match match = new Match();
+        Match match = new Match(matchable);
         Match horizontalMatch, verticalMatch;
 
         horizontalMatch = GetMatchesInDirection(match, matchable, Vector2Int.left);
@@ -163,13 +248,13 @@ public class MatchableGrid : GridSystem<Matchable>
 
     private Match GetMatchesInDirection(Match tree, Matchable matchable, Vector2Int direction)
     {
-        Match match = new Match(matchable);
+        Match match = new Match();
         Vector2Int checkPos = matchable.gridPosition + direction;
         Matchable next;
 
         while (IsWithinBounds(checkPos) && !IsPositionEmpty(checkPos))
         {
-            next = GetObjecAtPosition(checkPos);
+            next = GetObjectAtPosition(checkPos);
 
             if (next.Type == matchable.Type && next.Idle)
             {
@@ -211,4 +296,459 @@ public class MatchableGrid : GridSystem<Matchable>
             }
         }
     }
+
+    private IEnumerator ScanForMatches(System.Action<bool> callback)
+    {
+        bool madeMatch = false;
+        Matchable toMatch;
+        Match match;
+        object matchKey = new object();
+
+        // Iterate through the grid looking for matches
+        for (int y = 0; y < Dimensions.y; y++)
+        {
+            for (int x = 0; x < Dimensions.x; x++)
+            {
+                if (!IsPositionEmpty(x, y))
+                {
+                    toMatch = GetObjectAtPosition(x, y);
+
+                    if (!toMatch.Idle)
+                    {
+                        continue;
+                    }
+
+                    match = GetMatch(toMatch);
+
+                    if (match != null)
+                    {
+                        CoroutineManager.Instance.StartTrackedCoroutine(MatchManager.Instance.ResolveMatch(match), matchKey);
+                        madeMatch = true;
+                    }
+                }
+            }
+        }
+        
+        if(madeMatch)
+        {
+            yield return CoroutineManager.Instance.WaitForAll(matchKey);
+        }
+        callback(madeMatch);
+    }
+
+    private IEnumerator FillAndScanGrid()
+    {
+        bool matchesFound;
+        do
+        {
+            yield return StartCoroutine(CollapseGrid());
+            yield return StartCoroutine(PopulateGrid());
+            
+            matchesFound = false;
+            yield return StartCoroutine(ScanForMatches(result => matchesFound = result));
+        } while (matchesFound);
+
+        CheckPossibleMoves();
+    }
+
+
+    public IEnumerator CollapseGrid()
+    {
+        object collapseKey = new object();
+        // Process each column independently using two-pointer algorithm
+        for (int x = 0; x < Dimensions.x; x++)
+        {
+            int writePointer = 0; // Points to where next matchable should be written
+            
+            // Read from bottom to top
+            for (int readPointer = 0; readPointer < Dimensions.y; readPointer++)
+            {
+                if (!IsPositionEmpty(x, readPointer))
+                {
+                    Matchable matchable = GetObjectAtPosition(x, readPointer);
+                    
+                    // If read and write pointers are different, move the matchable
+                    if (readPointer != writePointer)
+                    {
+                        // Remove from current position
+                        RemoveObjectAtPosition(x, readPointer);
+                        
+                        // Set new grid position
+                        matchable.gridPosition = new Vector2Int(x, writePointer);
+                        SetObjectAtPosition(matchable, x, writePointer);
+                        
+                        // Calculate world position and move
+                        Vector3 worldPosition = transform.position + new Vector3(x, writePointer, 0);
+                        CoroutineManager.Instance.StartTrackedCoroutine(matchable.MoveWithPhysics(worldPosition), collapseKey);
+                        
+                        // Add a small stagger delay based on how far the matchable is falling
+                        // This creates a natural cascading effect
+                        yield return new WaitForSeconds(0.02f); // 0.02 seconds per cell fallen
+                    }
+                    
+                    // Move write pointer up for next matchable
+                    writePointer++;
+                }
+            }
+        }
+
+        // Wait a bit for movements to complete
+        yield return CoroutineManager.Instance.WaitForAll(collapseKey);
+    }
+
+    public IEnumerator TryActivatingPowerup(Matchable toActivate, Transform collectionPoint)
+    {
+        if (isProcessing) yield break;
+        isProcessing = true;
+        
+        try
+        {
+            yield return StartCoroutine(toActivate.ActivatePowerup());
+        }
+        finally
+        {
+            isProcessing = false;
+        }
+    }
+
+    public IEnumerator MatchRow(Matchable matchable)
+    {
+        if (isProcessing) yield break;
+        isProcessing = true;
+        
+        try
+        {
+            Matchable toResolve;
+            object matchKey = new object();
+            for (int x = 0; x < Dimensions.x; x++)
+            {
+                if (!IsPositionEmpty(x, matchable.gridPosition.y))
+                {
+                    toResolve = GetObjectAtPosition(x, matchable.gridPosition.y);
+                    if (toResolve.Idle)
+                    {
+                        CoroutineManager.Instance.StartTrackedCoroutine(MatchManager.Instance.ResolveMatch(new Match(toResolve)), matchKey);
+                    }
+                }
+            }
+            yield return CoroutineManager.Instance.WaitForAll(matchKey);
+
+            yield return StartCoroutine(FillAndScanGrid());
+        }
+        finally
+        {
+            isProcessing = false;
+        }
+    }
+
+    public IEnumerator MatchColumn(Matchable matchable)
+    {
+        if (isProcessing) yield break;
+        isProcessing = true;
+        
+        try
+        {
+            Matchable toResolve;
+            object matchKey = new object();
+            for (int y = 0; y < Dimensions.y; y++)
+            {
+                if (!IsPositionEmpty(matchable.gridPosition.x, y))
+                {
+                    toResolve = GetObjectAtPosition(matchable.gridPosition.x, y);
+                    if (toResolve.Idle)
+                    {
+                        CoroutineManager.Instance.StartTrackedCoroutine(MatchManager.Instance.ResolveMatch(new Match(toResolve)), matchKey);
+                    }
+                }
+            }
+            yield return CoroutineManager.Instance.WaitForAll(matchKey);
+
+            yield return StartCoroutine(FillAndScanGrid());
+        }
+        finally
+        {
+            isProcessing = false;
+        }
+    }
+
+    public IEnumerator MatchAllOfType(Matchable discoBall, int type)
+    {
+        if (isProcessing) yield break;
+        isProcessing = true;
+        
+        try
+        {
+            RemoveObjectAtPosition(discoBall.gridPosition);
+            object matchKey = new object();
+            for (int y = 0; y < Dimensions.y; y++)
+            {
+                for (int x = 0; x < Dimensions.x; x++)
+                {
+                    if (!IsPositionEmpty(x, y))
+                    {
+                        Matchable toResolve = GetObjectAtPosition(x, y);
+                        if (toResolve.Type == type && toResolve.Idle)
+                        {
+                            CoroutineManager.Instance.StartTrackedCoroutine(MatchManager.Instance.ResolveMatch(new Match(toResolve)), matchKey);
+                        }
+                    }
+                }
+            }
+            yield return CoroutineManager.Instance.WaitForAll(matchKey);
+
+            yield return StartCoroutine(FillAndScanGrid());
+        }
+        finally
+        {
+            isProcessing = false;
+        }
+    }
+
+    public IEnumerator MatchArea(Matchable matchable, int radius = 2)
+    {
+        if (isProcessing) yield break;
+        isProcessing = true;
+        
+        try
+        {
+            // Remove the bomb from the grid first to prevent it from being counted as empty
+            RemoveObjectAtPosition(matchable.gridPosition);
+
+            // Calculate the bounds of the 5x5 area (radius of 2 from center)
+            int startX = Mathf.Max(0, matchable.gridPosition.x - radius);
+            int endX = Mathf.Min(Dimensions.x - 1, matchable.gridPosition.x + radius);
+            int startY = Mathf.Max(0, matchable.gridPosition.y - radius);
+            int endY = Mathf.Min(Dimensions.y - 1, matchable.gridPosition.y + radius);
+
+            object matchKey = new object();
+            // Destroy all matchables in the area
+            for (int y = startY; y <= endY; y++)
+            {
+                for (int x = startX; x <= endX; x++)
+                {
+                    if (!IsPositionEmpty(x, y))
+                    {
+                        Matchable toResolve = GetObjectAtPosition(x, y);
+                        if (toResolve.Idle)
+                        {
+                            CoroutineManager.Instance.StartTrackedCoroutine(MatchManager.Instance.ResolveMatch(new Match(toResolve)), matchKey);
+                        }
+                    }
+                }
+            }
+            yield return CoroutineManager.Instance.WaitForAll(matchKey);
+
+            yield return StartCoroutine(FillAndScanGrid());
+        }
+        finally
+        {
+            isProcessing = false;
+        }
+    }
+
+    public void CheckPossibleMoves()
+    {
+        if (ScanForMoves() == 0)
+        {
+            Debug.Log("No possible moves left!");
+            // Handle no possible moves (e.g., reshuffle the grid)
+            StartCoroutine(ShuffleGrid());
+        }
+
+        else
+        {
+            ShowHint();
+        }
+    }
+
+    private IEnumerator ShuffleGrid()
+    {
+        List<Matchable> allMatchables = new List<Matchable>();
+
+        // Collect all matchables from the grid
+        for (int y = 0; y < Dimensions.y; y++)
+        {
+            for (int x = 0; x < Dimensions.x; x++)
+            {
+                if (!IsPositionEmpty(x, y))
+                {
+                    allMatchables.Add(GetObjectAtPosition(x, y));
+                    RemoveObjectAtPosition(new Vector2Int(x, y));
+                }
+            }
+        }
+
+        int maxAttempts = 10000;
+        int attempts = 0;
+        bool validShuffleFound = false;
+
+        // Keep shuffling until we find a valid configuration or hit max attempts
+        while (!validShuffleFound && attempts < maxAttempts)
+        {
+            attempts++;
+
+            // Shuffle the list
+            for (int i = 0; i < allMatchables.Count; i++)
+            {
+                Matchable temp = allMatchables[i];
+                int randomIndex = Random.Range(i, allMatchables.Count);
+                allMatchables[i] = allMatchables[randomIndex];
+                allMatchables[randomIndex] = temp;
+            }
+
+            // Temporarily assign to grid to check for matches and moves
+            int index = 0;
+            bool hasImmediateMatches = false;
+            
+            for (int y = 0; y < Dimensions.y; y++)
+            {
+                for (int x = 0; x < Dimensions.x; x++)
+                {
+                    if (index < allMatchables.Count)
+                    {
+                        Matchable matchable = allMatchables[index];
+                        matchable.gridPosition = new Vector2Int(x, y);
+                        SetObjectAtPosition(matchable, x, y);
+                        
+                        // Check if this position creates an immediate match
+                        if (HasMatchAtPosition(x, y, matchable.Type))
+                        {
+                            hasImmediateMatches = true;
+                            break;
+                        }
+                        
+                        index++;
+                    }
+                }
+                
+                if (hasImmediateMatches)
+                    break;
+            }
+
+            // Valid shuffle = no immediate matches AND has possible moves
+            if (!hasImmediateMatches && ScanForMoves() > 0)
+            {
+                validShuffleFound = true;
+            }
+        }
+
+        // If no valid shuffle found after max attempts, log warning
+        if (!validShuffleFound)
+        {
+            Debug.LogWarning($"Could not find valid shuffle after {maxAttempts} attempts. Using last shuffle.");
+        }
+
+        // Animate matchables to their new positions
+        for (int i = 0; i < allMatchables.Count; i++)
+        {
+            Matchable matchable = allMatchables[i];
+            Vector3 worldPosition = transform.position + new Vector3(matchable.gridPosition.x, matchable.gridPosition.y, 0);
+            
+            if (i == allMatchables.Count - 1)
+            {
+                // Wait for the last one to finish
+                yield return StartCoroutine(matchable.MoveToPosition(worldPosition));
+            }
+            else
+            {
+                StartCoroutine(matchable.MoveToPosition(worldPosition));
+            }
+        }
+
+        yield return null;
+    }
+
+    // Scan for all possible moves
+    private int ScanForMoves()
+    {
+        possibleMoves.Clear();
+
+        // Iterate through the grid looking for possible moves
+        for (int y = 0; y < Dimensions.y; y++)
+        {
+            for (int x = 0; x < Dimensions.x; x++)
+            {
+                if (IsWithinBounds(x, y) && !IsPositionEmpty(x, y) && CanMove(GetObjectAtPosition(x, y)))
+                {
+                    possibleMoves.Add(GetObjectAtPosition(x, y));
+                }
+            }
+        }
+
+        return possibleMoves.Count;
+    }
+
+    private bool CanMove(Matchable matchable)
+    {
+        if (CanMoveInDirection(matchable, Vector2Int.up) ||
+            CanMoveInDirection(matchable, Vector2Int.down) ||
+            CanMoveInDirection(matchable, Vector2Int.left) ||
+            CanMoveInDirection(matchable, Vector2Int.right))
+        {
+            return true;
+        }
+
+        return false;
+    }
+    
+    private bool CanMoveInDirection(Matchable toCheck, Vector2Int direction)
+    {
+        Vector2Int firstPosition = toCheck.gridPosition + direction * 2;
+        Vector2Int secondPosition = toCheck.gridPosition + direction * 3;
+
+        if (IsAPotentialMatch(toCheck, firstPosition, secondPosition))
+        {
+            return true; // Can move
+        }
+
+        Vector2Int clockWise = new Vector2Int(direction.y, -direction.x);
+        Vector2Int counterClockWise = new Vector2Int(-direction.y, direction.x);
+
+        // Look diagonally clockwise
+        firstPosition = toCheck.gridPosition + direction + clockWise;
+        secondPosition = toCheck.gridPosition + direction + clockWise * 2;
+
+        if (IsAPotentialMatch(toCheck, firstPosition, secondPosition))
+        {
+            return true; // Can move
+        }
+
+        // Look diagonally both ways
+        secondPosition = toCheck.gridPosition + direction + counterClockWise;
+
+        if (IsAPotentialMatch(toCheck, firstPosition, secondPosition))
+        {
+            return true; // Can move
+        }
+
+        // Look diagonally counter-clockwise
+        firstPosition = toCheck.gridPosition + direction + counterClockWise * 2;
+
+        if (IsAPotentialMatch(toCheck, firstPosition, secondPosition))
+        {
+            return true; // Can move
+        }
+
+        return false; // can not move
+    }
+
+    private bool IsAPotentialMatch(Matchable toCheck, Vector2Int firstPosition, Vector2Int secondPosition)
+    {
+        if (IsWithinBounds(firstPosition) && !IsPositionEmpty(firstPosition)
+            && IsWithinBounds(secondPosition) && !IsPositionEmpty(secondPosition)
+            && GetObjectAtPosition(firstPosition).Idle && GetObjectAtPosition(secondPosition).Idle
+            && GetObjectAtPosition(firstPosition).Type == toCheck.Type && GetObjectAtPosition(secondPosition).Type == toCheck.Type)
+        {
+            return true;
+        }
+
+        return false;
+    }
+
+    public void ShowHint()
+    {
+        Matchable matchableToHint = possibleMoves[Random.Range(0, possibleMoves.Count)];
+        HintIndicator.Instance.StartAutoHint(matchableToHint);
+    }
+
 }

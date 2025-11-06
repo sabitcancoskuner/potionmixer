@@ -6,7 +6,7 @@ public class ObjectPool<T> : Singleton<ObjectPool<T>> where T : MonoBehaviour
     // A prefab to instantiate
     [SerializeField] protected T prefab;
 
-    private List<T> pooledObjects;
+    public List<T> pooledObjects;
     private int amount;
     private bool isReady;
 
@@ -37,7 +37,7 @@ public class ObjectPool<T> : Singleton<ObjectPool<T>> where T : MonoBehaviour
     }
 
     // Get an object from the pool
-    public T GetPooledObject()
+    public virtual T GetPooledObject()
     {
         if (!isReady)
         {

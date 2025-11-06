@@ -120,7 +120,7 @@ public class GridSystem<T> : Singleton<GridSystem<T>>
     }
 
     // Get data from a specific grid position
-    public T GetObjecAtPosition(int x, int y)
+    public T GetObjectAtPosition(int x, int y)
     {
         if (!isReady)
         {
@@ -137,9 +137,9 @@ public class GridSystem<T> : Singleton<GridSystem<T>>
         return gridData[x, y];
     }
 
-    public T GetObjecAtPosition(Vector2Int position)
+    public T GetObjectAtPosition(Vector2Int position)
     {
-        return GetObjecAtPosition(position.x, position.y);
+        return GetObjectAtPosition(position.x, position.y);
     }
 
     // Remove data from a position (set to default)
@@ -205,8 +205,7 @@ public class GridSystem<T> : Singleton<GridSystem<T>>
             return false;
         }
 
-        T dataToMove = gridData[fromX, fromY];
-        gridData[toX, toY] = dataToMove;
+        gridData[toX, toY] = RemoveObjectAtPosition(fromX, fromY);
 
         return true;
     }
