@@ -1,20 +1,22 @@
 using System.Collections;
 using System.Collections.Generic;
+using System.Linq;
 using UnityEngine;
 using Random = UnityEngine.Random;
+
 
 public class MatchableGrid : GridSystem<Matchable>
 {
     private MatchablePool matchablePool;
 
-    private List<Matchable> possibleMoves;
+    private List<PotentialMatch> possibleMoves;
     
     private bool isProcessing = false;
 
     private void Start()
     {
         matchablePool = (MatchablePool)MatchablePool.Instance;
-        possibleMoves = new List<Matchable>();
+        possibleMoves = new List<PotentialMatch>();
     }
 
     public IEnumerator PopulateGrid(bool allowMatches = false, bool initialPopulation = false)
@@ -353,7 +355,8 @@ public class MatchableGrid : GridSystem<Matchable>
 
             branch.orientation = perpendicular;
 
-            if (branch.Count > 1)
+            // Allow single-piece branches (Count >= 1) to capture L-shapes and T-shapes
+            if (branch.Count >= 1)
             {
                 tree.Merge(branch);
                 // Recursively check for more branches
@@ -740,38 +743,55 @@ public class MatchableGrid : GridSystem<Matchable>
         {
             for (int x = 0; x < Dimensions.x; x++)
             {
-                if (IsWithinBounds(x, y) && !IsPositionEmpty(x, y) && CanMove(GetObjectAtPosition(x, y)))
+                if (IsWithinBounds(x, y) && !IsPositionEmpty(x, y))
                 {
-                    possibleMoves.Add(GetObjectAtPosition(x, y));
+                    Matchable matchable = GetObjectAtPosition(x, y);
+                    if (matchable.isObstacle)
+                    {
+                        continue;
+                    }
+                    List<Matchable> potentialMatch = CanMove(matchable);
+                    if (potentialMatch != null && potentialMatch.Count > 0)
+                    {
+                        possibleMoves.Add(new PotentialMatch(potentialMatch));
+                    }
                 }
             }
         }
 
+        // Sort by match length descending (longest matches first)
+        possibleMoves = possibleMoves.OrderByDescending(m => m.matchLength).ToList();
+
         return possibleMoves.Count;
     }
 
-    private bool CanMove(Matchable matchable)
+    private List<Matchable> CanMove(Matchable matchable)
     {
-        if (CanMoveInDirection(matchable, Vector2Int.up) ||
-            CanMoveInDirection(matchable, Vector2Int.down) ||
-            CanMoveInDirection(matchable, Vector2Int.left) ||
-            CanMoveInDirection(matchable, Vector2Int.right))
-        {
-            return true;
-        }
+        List<Matchable> match = null;
 
-        return false;
+        // Check all four directions
+        match = CanMoveInDirection(matchable, Vector2Int.up);
+        if (match != null) return match;
+
+        match = CanMoveInDirection(matchable, Vector2Int.down);
+        if (match != null) return match;
+
+        match = CanMoveInDirection(matchable, Vector2Int.left);
+        if (match != null) return match;
+
+        match = CanMoveInDirection(matchable, Vector2Int.right);
+        if (match != null) return match;
+
+        return null;
     }
     
-    private bool CanMoveInDirection(Matchable toCheck, Vector2Int direction)
+    private List<Matchable> CanMoveInDirection(Matchable toCheck, Vector2Int direction)
     {
         Vector2Int firstPosition = toCheck.gridPosition + direction * 2;
         Vector2Int secondPosition = toCheck.gridPosition + direction * 3;
 
-        if (IsAPotentialMatch(toCheck, firstPosition, secondPosition))
-        {
-            return true; // Can move
-        }
+        List<Matchable> match = IsAPotentialMatch(toCheck, firstPosition, secondPosition, direction);
+        if (match != null) return match;
 
         Vector2Int clockWise = new Vector2Int(direction.y, -direction.x);
         Vector2Int counterClockWise = new Vector2Int(-direction.y, direction.x);
@@ -780,47 +800,95 @@ public class MatchableGrid : GridSystem<Matchable>
         firstPosition = toCheck.gridPosition + direction + clockWise;
         secondPosition = toCheck.gridPosition + direction + clockWise * 2;
 
-        if (IsAPotentialMatch(toCheck, firstPosition, secondPosition))
-        {
-            return true; // Can move
-        }
+        match = IsAPotentialMatch(toCheck, firstPosition, secondPosition, direction);
+        if (match != null) return match;
 
         // Look diagonally both ways
         secondPosition = toCheck.gridPosition + direction + counterClockWise;
 
-        if (IsAPotentialMatch(toCheck, firstPosition, secondPosition))
-        {
-            return true; // Can move
-        }
+        match = IsAPotentialMatch(toCheck, firstPosition, secondPosition, direction);
+        if (match != null) return match;
 
         // Look diagonally counter-clockwise
         firstPosition = toCheck.gridPosition + direction + counterClockWise * 2;
 
-        if (IsAPotentialMatch(toCheck, firstPosition, secondPosition))
-        {
-            return true; // Can move
-        }
+        match = IsAPotentialMatch(toCheck, firstPosition, secondPosition, direction);
+        if (match != null) return match;
 
-        return false; // can not move
+        return null;
     }
 
-    private bool IsAPotentialMatch(Matchable toCheck, Vector2Int firstPosition, Vector2Int secondPosition)
+    private List<Matchable> IsAPotentialMatch(Matchable toCheck, Vector2Int firstPosition, Vector2Int secondPosition, Vector2Int moveDirection)
     {
         if (IsWithinBounds(firstPosition) && !IsPositionEmpty(firstPosition)
             && IsWithinBounds(secondPosition) && !IsPositionEmpty(secondPosition)
             && GetObjectAtPosition(firstPosition).Idle && GetObjectAtPosition(secondPosition).Idle
             && GetObjectAtPosition(firstPosition).Type == toCheck.Type && GetObjectAtPosition(secondPosition).Type == toCheck.Type)
         {
-            return true;
+            // Build the list of all pieces that would be part of this match
+            List<Matchable> matchPieces = new List<Matchable>();
+            
+            // Add the piece that would move to create the match
+            Vector2Int targetPosition = toCheck.gridPosition + moveDirection;
+            
+            // Simulate the swap: temporarily place toCheck at the target position
+            // Then find all pieces that would match
+            
+            // Add the two pieces we already know will match
+            matchPieces.Add(GetObjectAtPosition(firstPosition));
+            matchPieces.Add(GetObjectAtPosition(secondPosition));
+            
+            // Add the piece that would be moved (toCheck will be at targetPosition)
+            matchPieces.Add(toCheck);
+            
+            // Now check for additional pieces in line with the match
+            // Check in both directions from the target position
+            Vector2Int directionVector = firstPosition - targetPosition;
+            Vector2Int checkDirection = new Vector2Int(
+                directionVector.x != 0 ? directionVector.x / Mathf.Abs(directionVector.x) : 0,
+                directionVector.y != 0 ? directionVector.y / Mathf.Abs(directionVector.y) : 0
+            );
+            
+            // Check in the direction of the match
+            Vector2Int checkPos = targetPosition + checkDirection;
+            while (IsWithinBounds(checkPos) && !IsPositionEmpty(checkPos))
+            {
+                Matchable checkMatchable = GetObjectAtPosition(checkPos);
+                if (checkMatchable.Type == toCheck.Type && checkMatchable.Idle && !matchPieces.Contains(checkMatchable))
+                {
+                    matchPieces.Add(checkMatchable);
+                    checkPos += checkDirection;
+                }
+                else break;
+            }
+            
+            // Check in the opposite direction
+            checkPos = targetPosition - checkDirection;
+            while (IsWithinBounds(checkPos) && !IsPositionEmpty(checkPos))
+            {
+                Matchable checkMatchable = GetObjectAtPosition(checkPos);
+                if (checkMatchable.Type == toCheck.Type && checkMatchable.Idle && !matchPieces.Contains(checkMatchable))
+                {
+                    matchPieces.Add(checkMatchable);
+                    checkPos -= checkDirection;
+                }
+                else break;
+            }
+            
+            return matchPieces;
         }
 
-        return false;
+        return null;
     }
 
     public void ShowHint()
     {
-        Matchable matchableToHint = possibleMoves[Random.Range(0, possibleMoves.Count)];
-        HintIndicator.Instance.StartAutoHint(matchableToHint);
+        if (possibleMoves.Count > 0)
+        {
+            // Get the longest match (first one since we sorted by length descending)
+            PotentialMatch longestMatch = possibleMoves[0];
+            HintIndicator.Instance.StartAutoHint(longestMatch.matchPieces);
+        }
     }
 
 }

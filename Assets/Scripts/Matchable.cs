@@ -81,6 +81,9 @@ public class Matchable : MovableObject
 
     public IEnumerator Resolve()
     {
+        // Stop hint animation immediately to reset scale
+        StopHintAnimation();
+        
         // Disable collider immediately when starting to resolve
         // DisableCollider();
 

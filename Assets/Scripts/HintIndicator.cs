@@ -1,4 +1,5 @@
 using System.Collections;
+using System.Collections.Generic;
 using UnityEngine;
 
 public class HintIndicator : Singleton<HintIndicator>
@@ -7,13 +8,16 @@ public class HintIndicator : Singleton<HintIndicator>
     Vector2Int hintLocation;
 
     private Coroutine autoHintCoroutine;
-    private Matchable currentHintedMatchable;
+    private List<Matchable> currentHintedMatchables = new List<Matchable>();
 
-    public void IndicateHint(Matchable matchableToHint)
+    public void IndicateHint(List<Matchable> matchablesToHint)
     {
         CancelHint();
-        currentHintedMatchable = matchableToHint;
-        matchableToHint.StartHintAnimation();
+        currentHintedMatchables = new List<Matchable>(matchablesToHint);
+        foreach (Matchable matchable in matchablesToHint)
+        {
+            matchable.StartHintAnimation();
+        }
     }
 
     public void CancelHint()
@@ -24,23 +28,29 @@ public class HintIndicator : Singleton<HintIndicator>
             autoHintCoroutine = null;
         }
 
-        if (currentHintedMatchable != null)
+        if (currentHintedMatchables != null && currentHintedMatchables.Count > 0)
         {
-            currentHintedMatchable.StopHintAnimation();
-            currentHintedMatchable = null;
+            foreach (Matchable matchable in currentHintedMatchables)
+            {
+                if (matchable != null)
+                {
+                    matchable.StopHintAnimation();
+                }
+            }
+            currentHintedMatchables.Clear();
         }
     }
 
-    public void StartAutoHint(Matchable matchableToHint)
+    public void StartAutoHint(List<Matchable> matchablesToHint)
     {
         // Cancel any existing hint or waiting hint before starting a new one
         CancelHint();
-        autoHintCoroutine = StartCoroutine(WaitAndIndicateHint(matchableToHint));
+        autoHintCoroutine = StartCoroutine(WaitAndIndicateHint(matchablesToHint));
     }
     
-    private IEnumerator WaitAndIndicateHint(Matchable matchableToHint)
+    private IEnumerator WaitAndIndicateHint(List<Matchable> matchablesToHint)
     {
         yield return new WaitForSeconds(delayBeforeAutoHint);
-        IndicateHint(matchableToHint);
+        IndicateHint(matchablesToHint);
     }
 }

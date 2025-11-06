@@ -30,8 +30,11 @@ public class MatchManager : Singleton<MatchManager>
         if (toResolve.Type == MatchType.Four || toResolve.Type == MatchType.Five)
         {
             powerupFormed = UpgradeMatchable(toResolve.ToBeUpgraded, toResolve.PowerupType);
-            toResolve.RemoveMatchable(powerupFormed);
-            target = powerupFormed.transform;
+            if (powerupFormed != null)
+            {
+                toResolve.RemoveMatchable(powerupFormed);
+                target = powerupFormed.transform;
+            }
         }
 
         // Calculate matches to resolve AFTER removing the powerup
