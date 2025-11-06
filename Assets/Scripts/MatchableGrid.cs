@@ -27,13 +27,13 @@ public class MatchableGrid : GridSystem<Matchable>
         for (int x = 0; x < Dimensions.x; x++)
         {
             int spawnHeight = 0; // Track how high above the grid to spawn in this column
-            
+
             for (int y = 0; y < Dimensions.y; y++)
             {
                 if (IsPositionEmpty(x, y))
                 {
                     newMatchable = matchablePool.GetRandomMatchable();
-                    
+
                     if (initialPopulation)
                     {
                         // Place directly on grid for initial population
@@ -68,7 +68,7 @@ public class MatchableGrid : GridSystem<Matchable>
                     }
                 }
             }
-        } 
+        }
 
         // Start all matchables moving to their grid positions
         if (!initialPopulation)
@@ -79,7 +79,7 @@ public class MatchableGrid : GridSystem<Matchable>
             {
                 Vector3 targetPosition = transform.position + new Vector3(matchable.gridPosition.x, matchable.gridPosition.y, 0);
                 CoroutineManager.Instance.StartTrackedCoroutine(matchable.MoveWithPhysics(targetPosition), fallKey);
-                
+
                 // Add a small stagger delay between each matchable spawning
                 // This creates a natural cascading drop effect
                 matchableIndex++;
@@ -88,7 +88,7 @@ public class MatchableGrid : GridSystem<Matchable>
                     yield return new WaitForSeconds(0.02f); // Small delay between each matchable
                 }
             }
-            
+
             // Wait for all matchables to finish falling
             yield return CoroutineManager.Instance.WaitForAll(fallKey);
         }
@@ -98,6 +98,30 @@ public class MatchableGrid : GridSystem<Matchable>
             CheckPossibleMoves();
         }
 
+        yield return null;
+    }
+    
+    // Populate obstacles around the grid edges, 6 is jar and 7 is ice block
+    public IEnumerator PopulateObstacles(int obstacleType = 7)
+    {
+        Matchable obstacle;
+        int[] xPos = new int[] { 0, Dimensions.x - 1 };
+
+        foreach (int x in xPos)
+        {
+            for (int y = 0; y < Dimensions.y; y++)
+            {
+                obstacle = matchablePool.GetPooledObject();
+                obstacle.SetType(obstacleType);
+                obstacle.gameObject.SetActive(true);
+                obstacle.gridPosition = new Vector2Int(x, y);
+                SetObjectAtPosition(obstacle, x, y);
+
+                Vector3 onScreenPosition = transform.position + new Vector3(x, y, 0);
+                obstacle.transform.position = onScreenPosition;
+            }
+        }
+        
         yield return null;
     }
 
@@ -140,13 +164,18 @@ public class MatchableGrid : GridSystem<Matchable>
     {
         if (isProcessing) yield break;
         isProcessing = true;
-        
+
         try
         {
             // Make a copy of what will be swapped so player can keep swapping while checking for matches
             Matchable[] copies = new Matchable[2];
             copies[0] = toBeSwapped[0];
             copies[1] = toBeSwapped[1];
+
+            if (toBeSwapped[0].Type == 7 || toBeSwapped[1].Type == 7)
+            {
+                yield break;
+            }
 
             HintIndicator.Instance.CancelHint();
 
@@ -161,16 +190,18 @@ public class MatchableGrid : GridSystem<Matchable>
             if (matches[0] != null || matches[1] != null)
             {
                 object matchKey = new object();
-                
+
                 if (matches[0] != null)
                 {
                     CoroutineManager.Instance.StartTrackedCoroutine(MatchManager.Instance.ResolveMatch(matches[0]), matchKey);
+                    CoroutineManager.Instance.StartTrackedCoroutine(Damage(matches[0]), matchKey);
                 }
                 if (matches[1] != null)
                 {
                     CoroutineManager.Instance.StartTrackedCoroutine(MatchManager.Instance.ResolveMatch(matches[1]), matchKey);
+                    CoroutineManager.Instance.StartTrackedCoroutine(Damage(matches[1]), matchKey);
                 }
-                
+
                 // Wait for both matches to complete
                 yield return CoroutineManager.Instance.WaitForAll(matchKey);
                 yield return StartCoroutine(FillAndScanGrid());
@@ -187,6 +218,35 @@ public class MatchableGrid : GridSystem<Matchable>
         {
             isProcessing = false;
         }
+    }
+    
+    private IEnumerator Damage(Match toDamage)
+    {
+        foreach (Matchable matchable in toDamage.Matchables)
+        {
+            Vector2Int position = matchable.gridPosition;
+            Vector2Int[] adjacentPositions = new Vector2Int[]
+            {
+                position + Vector2Int.up,
+                position + Vector2Int.down,
+                position + Vector2Int.left,
+                position + Vector2Int.right
+            };
+
+            foreach (Vector2Int adjacent in adjacentPositions)
+            {
+                if (IsWithinBounds(adjacent) && !IsPositionEmpty(adjacent))
+                {
+                    Matchable adjacentMatchable = GetObjectAtPosition(adjacent);
+
+                    if(adjacentMatchable.isObstacle)
+                    {
+                        StartCoroutine(adjacentMatchable.Resolve());
+                    }
+                }
+            }
+        }   
+        yield return null;
     }
 
     private IEnumerator SwapMatchables(Matchable[] toBeSwapped)
@@ -211,6 +271,11 @@ public class MatchableGrid : GridSystem<Matchable>
 
     private Match GetMatch(Matchable matchable)
     {
+        if (matchable.isObstacle)
+        {
+            return null;
+        }
+
         Match match = new Match(matchable);
         Match horizontalMatch, verticalMatch;
 
@@ -366,6 +431,13 @@ public class MatchableGrid : GridSystem<Matchable>
                 if (!IsPositionEmpty(x, readPointer))
                 {
                     Matchable matchable = GetObjectAtPosition(x, readPointer);
+
+                    if (matchable.Type == 7)
+                    {
+                        // Ice block obstacle, cannot move
+                        writePointer = readPointer + 1;
+                        continue;
+                    }
                     
                     // If read and write pointers are different, move the matchable
                     if (readPointer != writePointer)

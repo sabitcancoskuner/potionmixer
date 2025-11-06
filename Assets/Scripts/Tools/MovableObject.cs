@@ -5,6 +5,7 @@ public class MovableObject : MonoBehaviour
 {
     private Vector3 from, to;
     private float howFar = 0;
+    public bool canMove = true;
     [SerializeField] private float speed = 1f;
     [SerializeField] protected Rigidbody2D rb;
 

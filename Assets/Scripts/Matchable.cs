@@ -6,13 +6,20 @@ public class Matchable : MovableObject
 {
     private int type;
     private bool isPowerUp = false;
+    public bool isObstacle = false;
     [SerializeField] private PowerupType powerupType = PowerupType.None;
 
     [SerializeField] private Sprite[] sprites;
+    [Space]
     [SerializeField] private Sprite horizontalRocketSprite;
     [SerializeField] private Sprite verticalRocketSprite;
     [SerializeField] private Sprite discoBallSprite;
     [SerializeField] private Sprite bombSprite;
+
+    [Space]
+    [SerializeField] private Sprite[] moveableObstacleSprite;
+    [SerializeField] private Sprite[] staticObstacleSprite;
+    public int obstacleHealth = 2;
 
     [Space]
     [SerializeField] private float gravityForce = 10f;
@@ -44,7 +51,6 @@ public class Matchable : MovableObject
 
         rb.gravityScale = 0;
         rb.constraints = RigidbodyConstraints2D.FreezeRotation | RigidbodyConstraints2D.FreezePositionX;
-        //rb.bodyType = RigidbodyType2D.Kinematic;
 
         boxCollider = GetComponent<BoxCollider2D>();
     }
@@ -52,16 +58,29 @@ public class Matchable : MovableObject
     public void SetType(int newType)
     {
         type = newType;
-        spriteRenderer.sprite = sprites[newType];
+        
+        if (type == 6) // Jar Obstacle
+        {
+            isObstacle = true;
+            obstacleHealth = 2; // Reset health when setting type
+            spriteRenderer.sprite = moveableObstacleSprite[0];
+        }
+        else if (type == 7) // Ice Block Obstacle
+        {
+            isObstacle = true;
+            obstacleHealth = 2; // Reset health when setting type
+            spriteRenderer.sprite = staticObstacleSprite[0];
+            canMove = false;
+        }
+        else
+        {
+            isObstacle = false; // Make sure it's not an obstacle
+            spriteRenderer.sprite = sprites[newType];
+        }        
     }
 
-    public IEnumerator Resolve(Transform collectionPoint)
+    public IEnumerator Resolve()
     {
-        if (collectionPoint == null)
-        {
-            yield break;
-        }
-
         // Disable collider immediately when starting to resolve
         // DisableCollider();
 
@@ -70,18 +89,42 @@ public class Matchable : MovableObject
             // If powerup is being resolved as part of a match (not activated directly),
             // just activate it without moving to collection point
             yield return StartCoroutine(ActivatePowerup());
-            
+
             // Return object to the pool
             matchablePool.ReturnToPool(this);
+            yield break;
+        }
+
+        if (isObstacle)
+        {
+            if (type == 6)
+            {
+                spriteRenderer.sprite = moveableObstacleSprite[1];
+            }
+
+            else if (type == 7)
+            {
+                spriteRenderer.sprite = staticObstacleSprite[1];
+            }
+            
+            // Damage the obstacle
+            obstacleHealth--;
+            
+            // Play obstacle damage animation here if needed
+            
+            if (obstacleHealth <= 0)
+            {
+                // Obstacle is destroyed, remove from grid
+                matchableGrid.RemoveObjectAtPosition(gridPosition);
+                matchablePool.ReturnToPool(this);
+            }
+            // If health > 0, obstacle stays on grid with reduced health
             yield break;
         }
 
         // For normal matchables: Draw above all other objects
         spriteRenderer.sortingOrder = 10;
         DisablePhysics();
-
-        // Move them off the grid
-        // yield return StartCoroutine(MoveToTransform(collectionPoint));
 
         // Reset sorting order
         spriteRenderer.sortingOrder = 1;
@@ -117,7 +160,7 @@ public class Matchable : MovableObject
                 break;
         }
     }
-    
+
     public IEnumerator ActivatePowerup()
     {
         if (!isPowerUp)
@@ -148,7 +191,7 @@ public class Matchable : MovableObject
                 yield return StartCoroutine(HandleBomb());
                 break;
         }
-        
+
         // Re-enable sprite for when it's returned to pool
         spriteRenderer.enabled = true;
     }
@@ -267,6 +310,6 @@ public class Matchable : MovableObject
         idle = true;
         DisablePhysics();
     }
-    
+
 }
 

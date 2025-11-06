@@ -23,6 +23,7 @@ public class GameManager : Singleton<GameManager>
 
         yield return null;
 
+        yield return StartCoroutine(matchableGrid.PopulateObstacles());
         StartCoroutine(matchableGrid.PopulateGrid(initialPopulation: true));
     }
 }

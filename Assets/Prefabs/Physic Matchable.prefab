@@ -47,8 +47,10 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: bf1cfb7cd65fed14493295a73690a3d9, type: 3}
   m_Name: 
   m_EditorClassIdentifier: 
+  canMove: 1
   speed: 2.5
   rb: {fileID: 0}
+  isObstacle: 0
   powerupType: 0
   sprites:
   - {fileID: -7075775858777776764, guid: 28f870fdb473b7b4a803dd9f4b9db94b, type: 3}
@@ -61,7 +63,14 @@ MonoBehaviour:
   verticalRocketSprite: {fileID: 2376157048534653533, guid: 5a90614880ce53e42a06542211df87ed, type: 3}
   discoBallSprite: {fileID: -3201957953725180191, guid: 5a90614880ce53e42a06542211df87ed, type: 3}
   bombSprite: {fileID: -7139730225923531880, guid: 5a90614880ce53e42a06542211df87ed, type: 3}
-  gravityForce: 2
+  moveableObstacleSprite:
+  - {fileID: 7138112251347864918, guid: f107f8738cb08f24fb34eddbc383f1ae, type: 3}
+  - {fileID: 7845364696683670460, guid: f107f8738cb08f24fb34eddbc383f1ae, type: 3}
+  staticObstacleSprite:
+  - {fileID: -1546371269516058025, guid: 38ebbe12185725747a86f949f6504f3a, type: 3}
+  - {fileID: -8004701464735263766, guid: 38ebbe12185725747a86f949f6504f3a, type: 3}
+  obstacleHealth: 2
+  gravityForce: 3
   gridPosition: {x: 0, y: 0}
 --- !u!212 &8190824466097835965
 SpriteRenderer:

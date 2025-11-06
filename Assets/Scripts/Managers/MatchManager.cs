@@ -22,6 +22,11 @@ public class MatchManager : Singleton<MatchManager>
         Transform target = collectionPoint;
 
         // Upgrade the matchable if needed
+        if (toResolve.Count > 5)
+        {
+            toResolve.type = MatchType.Five;
+        }
+
         if (toResolve.Type == MatchType.Four || toResolve.Type == MatchType.Five)
         {
             powerupFormed = UpgradeMatchable(toResolve.ToBeUpgraded, toResolve.PowerupType);
@@ -29,7 +34,10 @@ public class MatchManager : Singleton<MatchManager>
             target = powerupFormed.transform;
         }
 
-        for (int i = 0; i < toResolve.Count; i++)
+        // Calculate matches to resolve AFTER removing the powerup
+        int matchesToResolve = Mathf.Min(toResolve.Count, 5);
+
+        for (int i = 0; i < matchesToResolve; i++)
         {
             // Get the matchable to resolve
             matchable = toResolve.Matchables[i];
@@ -38,13 +46,13 @@ public class MatchManager : Singleton<MatchManager>
             grid.RemoveObjectAtPosition(matchable.gridPosition);
 
             // Move the to the collection point
-            if (i == toResolve.Count - 1)
+            if (i == matchesToResolve - 1)
             {
-                yield return StartCoroutine(matchable.Resolve(target));
+                yield return StartCoroutine(matchable.Resolve());
             }
             else
             {
-                StartCoroutine(matchable.Resolve(target));
+                StartCoroutine(matchable.Resolve());
             }
         }
     }

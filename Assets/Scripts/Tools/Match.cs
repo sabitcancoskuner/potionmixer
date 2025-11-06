@@ -63,6 +63,9 @@ public class Match
                 case 5:
                     return MatchType.Five;
                 default:
+                    // Any match of 6+ is also considered a Five match for powerup purposes
+                    if (Count > 5)
+                        return MatchType.Five;
                     return MatchType.None;
             }
         }
