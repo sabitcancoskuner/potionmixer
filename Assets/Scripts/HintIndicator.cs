@@ -22,6 +22,8 @@ public class HintIndicator : Singleton<HintIndicator>
 
     public void CancelHint()
     {
+        Debug.Log($"CancelHint called, currentHintedMatchables count: {currentHintedMatchables?.Count ?? 0}");
+        
         if (autoHintCoroutine != null)
         {
             StopCoroutine(autoHintCoroutine);
@@ -32,9 +34,14 @@ public class HintIndicator : Singleton<HintIndicator>
         {
             foreach (Matchable matchable in currentHintedMatchables)
             {
-                if (matchable != null)
+                if (matchable != null && matchable.gameObject != null)
                 {
+                    Debug.Log($"Calling StopHintAnimation on {matchable.gameObject.name}");
                     matchable.StopHintAnimation();
+                }
+                else
+                {
+                    Debug.LogWarning($"Matchable or its gameObject is null in CancelHint");
                 }
             }
             currentHintedMatchables.Clear();

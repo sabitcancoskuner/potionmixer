@@ -41,6 +41,7 @@ public class Matchable : MovableObject
     private MatchablePool matchablePool;
     private MatchableGrid matchableGrid;
     private Coroutine hintCoroutine;
+    private Coroutine scaleCoroutine;
 
     private void Awake()
     {
@@ -62,7 +63,7 @@ public class Matchable : MovableObject
         if (type == 6) // Jar Obstacle
         {
             isObstacle = true;
-            obstacleHealth = 2; // Reset health when setting type
+            obstacleHealth = 1; // Reset health when setting type
             spriteRenderer.sprite = moveableObstacleSprite[0];
         }
         else if (type == 7) // Ice Block Obstacle
@@ -223,14 +224,31 @@ public class Matchable : MovableObject
 
     public IEnumerator HintMatchable()
     {
-        Vector3 originalScale = transform.localScale;
+        Vector3 originalScale = Vector3.one;
         Vector3 targetScale = originalScale * 1.4f;
 
         // Continuously loop the scaling animation
         while (true)
         {
-            yield return StartCoroutine(Scale(originalScale, targetScale));
-            yield return StartCoroutine(Scale(targetScale, originalScale));
+            // Scale up
+            float t = 0;
+            while (t < 1f)
+            {
+                t += Time.deltaTime * 2f; // Speed of animation
+                transform.localScale = Vector3.Lerp(originalScale, targetScale, t);
+                yield return null;
+            }
+            transform.localScale = targetScale;
+            
+            // Scale down
+            t = 0;
+            while (t < 1f)
+            {
+                t += Time.deltaTime * 2f; // Speed of animation
+                transform.localScale = Vector3.Lerp(targetScale, originalScale, t);
+                yield return null;
+            }
+            transform.localScale = originalScale;
         }
     }
 
@@ -255,12 +273,21 @@ public class Matchable : MovableObject
 
     public void StopHintAnimation()
     {
+        // Stop the hint coroutine
         if (hintCoroutine != null)
         {
             StopCoroutine(hintCoroutine);
             hintCoroutine = null;
         }
-        // Reset to original scale
+        
+        // Stop any scale coroutine that might be running
+        if (scaleCoroutine != null)
+        {
+            StopCoroutine(scaleCoroutine);
+            scaleCoroutine = null;
+        }
+        
+        // Force immediate scale reset
         transform.localScale = Vector3.one;
         spriteRenderer.sortingOrder = 1; // Reset sorting order
     }

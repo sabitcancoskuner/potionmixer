@@ -19,8 +19,6 @@ public class MatchManager : Singleton<MatchManager>
         Matchable matchable;
         Matchable powerupFormed = null;
 
-        Transform target = collectionPoint;
-
         // Upgrade the matchable if needed
         if (toResolve.Count > 5)
         {
@@ -30,11 +28,7 @@ public class MatchManager : Singleton<MatchManager>
         if (toResolve.Type == MatchType.Four || toResolve.Type == MatchType.Five)
         {
             powerupFormed = UpgradeMatchable(toResolve.ToBeUpgraded, toResolve.PowerupType);
-            if (powerupFormed != null)
-            {
-                toResolve.RemoveMatchable(powerupFormed);
-                target = powerupFormed.transform;
-            }
+            toResolve.RemoveMatchable(powerupFormed);
         }
 
         // Calculate matches to resolve AFTER removing the powerup
@@ -46,7 +40,10 @@ public class MatchManager : Singleton<MatchManager>
             matchable = toResolve.Matchables[i];
 
             // Remove the matchables from the grid
-            grid.RemoveObjectAtPosition(matchable.gridPosition);
+            if (!matchable.isObstacle)
+            {
+                grid.RemoveObjectAtPosition(matchable.gridPosition);
+            }
 
             // Move the to the collection point
             if (i == matchesToResolve - 1)
@@ -118,6 +115,11 @@ public class MatchManager : Singleton<MatchManager>
     {
         // Cancel any active hint when player makes a move
         HintIndicator.Instance.CancelHint();
+
+        if (grid.isProcessing)
+        {
+            yield break;
+        }
 
         if (grid.IsWithinBounds(touchPosition))
         {

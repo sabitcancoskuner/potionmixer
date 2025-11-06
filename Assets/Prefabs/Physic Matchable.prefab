@@ -59,10 +59,10 @@ MonoBehaviour:
   - {fileID: 2694671778486082266, guid: 727e5195720a39249b98b43693a6bd80, type: 3}
   - {fileID: -7931796237472321255, guid: 1325573b7450e734d89d89749fdd95ac, type: 3}
   - {fileID: -3145876508822481208, guid: 1325573b7450e734d89d89749fdd95ac, type: 3}
-  horizontalRocketSprite: {fileID: 4267033477647062201, guid: 5a90614880ce53e42a06542211df87ed, type: 3}
-  verticalRocketSprite: {fileID: 2376157048534653533, guid: 5a90614880ce53e42a06542211df87ed, type: 3}
-  discoBallSprite: {fileID: -3201957953725180191, guid: 5a90614880ce53e42a06542211df87ed, type: 3}
-  bombSprite: {fileID: -7139730225923531880, guid: 5a90614880ce53e42a06542211df87ed, type: 3}
+  horizontalRocketSprite: {fileID: 21300000, guid: 949149300ceef8544b44e50a9c1e3b13, type: 3}
+  verticalRocketSprite: {fileID: 21300000, guid: b2aabd3818c623541bf51d6f1bdf5a2a, type: 3}
+  discoBallSprite: {fileID: 21300000, guid: 7a964e0eb59a01848be0d94c9335dd86, type: 3}
+  bombSprite: {fileID: 21300000, guid: d1ab0068abb02d342a15c454f38aaebd, type: 3}
   moveableObstacleSprite:
   - {fileID: 7138112251347864918, guid: f107f8738cb08f24fb34eddbc383f1ae, type: 3}
   - {fileID: 7845364696683670460, guid: f107f8738cb08f24fb34eddbc383f1ae, type: 3}

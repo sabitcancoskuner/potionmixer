@@ -11,7 +11,7 @@ public class MatchableGrid : GridSystem<Matchable>
 
     private List<PotentialMatch> possibleMoves;
     
-    private bool isProcessing = false;
+    public bool isProcessing = false;
 
     private void Start()
     {
@@ -355,8 +355,8 @@ public class MatchableGrid : GridSystem<Matchable>
 
             branch.orientation = perpendicular;
 
-            // Allow single-piece branches (Count >= 1) to capture L-shapes and T-shapes
-            if (branch.Count >= 1)
+            // Allow single-piece branches (Count > 1) to capture L-shapes and T-shapes
+            if (branch.Count > 1)
             {
                 tree.Merge(branch);
                 // Recursively check for more branches
