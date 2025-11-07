@@ -1,5 +1,6 @@
 using System.Collections;
 using UnityEngine;
+using PrimeTween;
 using Random = UnityEngine.Random;
 
 public class Matchable : MovableObject
@@ -25,6 +26,10 @@ public class Matchable : MovableObject
     [SerializeField] private float gravityForce = 10f;
     private BoxCollider2D boxCollider;
 
+    [Space]
+    [SerializeField] private float resolveEffectDuration = .5f;
+    [SerializeField] private float bombEffectDuration = 1f;
+
     public int Type
     {
         get { return type; }
@@ -38,6 +43,7 @@ public class Matchable : MovableObject
     private SpriteRenderer spriteRenderer;
     public Vector2Int gridPosition;
 
+    private EffectManager effectManager;
     private MatchablePool matchablePool;
     private MatchableGrid matchableGrid;
     private Coroutine hintCoroutine;
@@ -46,6 +52,7 @@ public class Matchable : MovableObject
     private void Awake()
     {
         spriteRenderer = GetComponent<SpriteRenderer>();
+        effectManager = EffectManager.Instance;
         matchablePool = (MatchablePool)MatchablePool.Instance;
         matchableGrid = (MatchableGrid)MatchableGrid.Instance;
         rb = GetComponent<Rigidbody2D>();
@@ -84,9 +91,6 @@ public class Matchable : MovableObject
     {
         // Stop hint animation immediately to reset scale
         StopHintAnimation();
-        
-        // Disable collider immediately when starting to resolve
-        // DisableCollider();
 
         if (isPowerUp)
         {
@@ -110,12 +114,12 @@ public class Matchable : MovableObject
             {
                 spriteRenderer.sprite = staticObstacleSprite[1];
             }
-            
+
             // Damage the obstacle
             obstacleHealth--;
-            
+
             // Play obstacle damage animation here if needed
-            
+
             if (obstacleHealth <= 0)
             {
                 // Obstacle is destroyed, remove from grid
@@ -126,8 +130,11 @@ public class Matchable : MovableObject
             yield break;
         }
 
+        // Play resolve visual effect
+        effectManager.PlayResolveEffect(transform.position, resolveEffectDuration);
+
         // For normal matchables: Draw above all other objects
-        spriteRenderer.sortingOrder = 10;
+        // spriteRenderer.sortingOrder = 10;
         DisablePhysics();
 
         // Reset sorting order
@@ -203,6 +210,7 @@ public class Matchable : MovableObject
     private IEnumerator HandleBomb()
     {
         // Destroy a 5x5 area centered on the bomb position
+        effectManager.PlayBombEffect(transform.position, bombEffectDuration);
         yield return StartCoroutine(matchableGrid.MatchArea(this, radius: 2));
     }
 
@@ -214,11 +222,15 @@ public class Matchable : MovableObject
 
     private IEnumerator HandleVerticalRocket()
     {
+        // effectManager.PlayRocketEffect(transform.position, Vector2.up);
+        // effectManager.PlayRocketEffect(transform.position, Vector2.down);
         yield return StartCoroutine(matchableGrid.MatchColumn(this));
     }
 
     private IEnumerator HandleHorizontalRocket()
     {
+        // effectManager.PlayRocketEffect(transform.position, Vector2.left);
+        // effectManager.PlayRocketEffect(transform.position, Vector2.right);
         yield return StartCoroutine(matchableGrid.MatchRow(this));
     }
 
@@ -321,14 +333,14 @@ public class Matchable : MovableObject
         idle = false;
 
         float elapsed = 0f;
-        float threshold = 0.15f; // How close is "close enough"
+        float threshold = 0.25f; // How close is "close enough"
 
         while (Vector3.Distance(transform.position, targetPosition) > threshold && elapsed < timeout)
         {
-            if (rb.linearVelocity.magnitude < 15f)
-            {
-                rb.AddForce(Vector2.down * gravityForce);
-            }
+            // if (rb.linearVelocity.magnitude < 15f)
+            // {
+            //     rb.AddForce(Vector2.down * gravityForce);
+            // }
             // Apply force towards target
 
             elapsed += Time.deltaTime;
@@ -339,6 +351,7 @@ public class Matchable : MovableObject
         transform.position = targetPosition;
         idle = true;
         DisablePhysics();
+        yield return Tween.ShakeLocalPosition(transform, strength: new Vector3(0, 0.3f), duration: 0.1f).ToYieldInstruction();
     }
 
 }

@@ -1,6 +1,7 @@
 using System.Collections;
 using System.Collections.Generic;
 using System.Linq;
+using Unity.Collections;
 using UnityEngine;
 using Random = UnityEngine.Random;
 
@@ -12,6 +13,9 @@ public class MatchableGrid : GridSystem<Matchable>
     private List<PotentialMatch> possibleMoves;
     
     public bool isProcessing = false;
+    
+    // Define the play area height (bottom 9 rows are playable, top 9 are spawn buffer)
+    private const int PLAY_AREA_HEIGHT = 9;
 
     private void Start()
     {
@@ -30,6 +34,7 @@ public class MatchableGrid : GridSystem<Matchable>
         {
             int spawnHeight = 0; // Track how high above the grid to spawn in this column
 
+            // Populate all empty cells in the entire grid
             for (int y = 0; y < Dimensions.y; y++)
             {
                 if (IsPositionEmpty(x, y))
@@ -44,7 +49,7 @@ public class MatchableGrid : GridSystem<Matchable>
                     }
                     else
                     {
-                        // Spawn above the grid, stacked by spawn height
+                        // Spawn above the entire grid, stacked by spawn height
                         onScreenPosition = transform.position + new Vector3(x, Dimensions.y + spawnHeight, 0);
                         newMatchable.transform.position = onScreenPosition;
                         spawnHeight++; // Next empty spot in this column spawns higher
@@ -55,8 +60,8 @@ public class MatchableGrid : GridSystem<Matchable>
                     SetObjectAtPosition(newMatchable, x, y);
                     newMatchables.Add(newMatchable);
 
-                    // Avoid matches if requested
-                    if (!allowMatches)
+                    // Only avoid matches in the play area (bottom PLAY_AREA_HEIGHT rows)
+                    if (!allowMatches && y < PLAY_AREA_HEIGHT)
                     {
                         int type = newMatchable.Type;
                         while (HasMatchAtPosition(x, y, type))
@@ -111,7 +116,8 @@ public class MatchableGrid : GridSystem<Matchable>
 
         foreach (int x in xPos)
         {
-            for (int y = 0; y < Dimensions.y; y++)
+            // Only populate obstacles in the play area (bottom PLAY_AREA_HEIGHT rows)
+            for (int y = 0; y < PLAY_AREA_HEIGHT; y++)
             {
                 obstacle = matchablePool.GetPooledObject();
                 obstacle.SetType(obstacleType);
@@ -273,7 +279,14 @@ public class MatchableGrid : GridSystem<Matchable>
 
     private Match GetMatch(Matchable matchable)
     {
+        // Don't check for matches if the matchable is an obstacle
         if (matchable.isObstacle)
+        {
+            return null;
+        }
+        
+        // Don't check for matches in the spawn buffer (only in play area)
+        if (matchable.gridPosition.y >= PLAY_AREA_HEIGHT)
         {
             return null;
         }
@@ -321,6 +334,12 @@ public class MatchableGrid : GridSystem<Matchable>
 
         while (IsWithinBounds(checkPos) && !IsPositionEmpty(checkPos))
         {
+            // Stop if we're checking above the play area (in spawn buffer)
+            if (checkPos.y >= PLAY_AREA_HEIGHT)
+            {
+                break;
+            }
+            
             next = GetObjectAtPosition(checkPos);
 
             if (next.Type == matchable.Type && next.Idle)
@@ -372,8 +391,8 @@ public class MatchableGrid : GridSystem<Matchable>
         Match match;
         object matchKey = new object();
 
-        // Iterate through the grid looking for matches
-        for (int y = 0; y < Dimensions.y; y++)
+        // Iterate through the play area looking for matches (only bottom PLAY_AREA_HEIGHT rows)
+        for (int y = 0; y < PLAY_AREA_HEIGHT; y++)
         {
             for (int x = 0; x < Dimensions.x; x++)
             {
@@ -427,8 +446,8 @@ public class MatchableGrid : GridSystem<Matchable>
         for (int x = 0; x < Dimensions.x; x++)
         {
             int writePointer = 0; // Points to where next matchable should be written
-            
-            // Read from bottom to top
+
+            // Read from bottom to top through the ENTIRE column (including spawn buffer)
             for (int readPointer = 0; readPointer < Dimensions.y; readPointer++)
             {
                 if (!IsPositionEmpty(x, readPointer))
@@ -441,26 +460,26 @@ public class MatchableGrid : GridSystem<Matchable>
                         writePointer = readPointer + 1;
                         continue;
                     }
-                    
+
                     // If read and write pointers are different, move the matchable
                     if (readPointer != writePointer)
                     {
                         // Remove from current position
                         RemoveObjectAtPosition(x, readPointer);
-                        
+
                         // Set new grid position
                         matchable.gridPosition = new Vector2Int(x, writePointer);
                         SetObjectAtPosition(matchable, x, writePointer);
-                        
+
                         // Calculate world position and move
                         Vector3 worldPosition = transform.position + new Vector3(x, writePointer, 0);
                         CoroutineManager.Instance.StartTrackedCoroutine(matchable.MoveWithPhysics(worldPosition), collapseKey);
-                        
+
                         // Add a small stagger delay based on how far the matchable is falling
                         // This creates a natural cascading effect
-                        yield return new WaitForSeconds(0.02f); // 0.02 seconds per cell fallen
+                        yield return new WaitForSeconds(0.001f); // 0.02 seconds per cell fallen
                     }
-                    
+
                     // Move write pointer up for next matchable
                     writePointer++;
                 }
@@ -469,6 +488,59 @@ public class MatchableGrid : GridSystem<Matchable>
 
         // Wait a bit for movements to complete
         yield return CoroutineManager.Instance.WaitForAll(collapseKey);
+        yield return StartCoroutine(CheckForDigonalMovement());
+    }
+
+    private IEnumerator CheckForDigonalMovement()
+    {
+        bool foundDiagonalMove = true;
+        
+        // Keep checking while diagonal movements are available
+        while (foundDiagonalMove)
+        {
+            foundDiagonalMove = false;
+
+            // Use goto to break out of both loops when we find a diagonal move
+            for (int x = 1; x < Dimensions.x - 1; x++)
+            {
+                for (int y = 1; y < PLAY_AREA_HEIGHT; y++)
+                {
+                    if (GetObjectAtPosition(x, y).Type != 7 &&!IsPositionEmpty(x, y) && !IsPositionEmpty(x, y - 1))
+                    {
+                        // Check for diagonal match
+                        Matchable current = GetObjectAtPosition(x, y);
+                        
+                        if (IsPositionEmpty(x + 1, y - 1))
+                        {
+                            // Found a digonal match down right
+                            RemoveObjectAtPosition(x, y);                        
+                            current.gridPosition = new Vector2Int(x + 1, y - 1); 
+                            SetObjectAtPosition(current, x + 1, y - 1);
+                            current.transform.position = transform.position + new Vector3(x + 1, y - 1, 0);
+                            foundDiagonalMove = true;
+                            goto DiagonalMoveFound; // Break out of both loops
+                        }
+                        else if (IsPositionEmpty(x - 1, y - 1))
+                        {
+                            // Found a diagonal match down left
+                            RemoveObjectAtPosition(x, y);
+                            current.gridPosition = new Vector2Int(x - 1, y - 1);
+                            SetObjectAtPosition(current, x - 1, y - 1);
+                            current.transform.position = transform.position + new Vector3(x - 1, y - 1, 0);
+                            foundDiagonalMove = true;
+                            goto DiagonalMoveFound; // Break out of both loops
+                        }
+                    }
+                }
+            }
+            
+            DiagonalMoveFound:
+            // If we found any diagonal moves, collapse the grid and check again
+            if (foundDiagonalMove)
+            {
+                yield return StartCoroutine(CollapseGrid());
+            }
+        }
     }
 
     public IEnumerator TryActivatingPowerup(Matchable toActivate, Transform collectionPoint)
@@ -525,7 +597,8 @@ public class MatchableGrid : GridSystem<Matchable>
         {
             Matchable toResolve;
             object matchKey = new object();
-            for (int y = 0; y < Dimensions.y; y++)
+            // Only match within the play area height
+            for (int y = 0; y < PLAY_AREA_HEIGHT; y++)
             {
                 if (!IsPositionEmpty(matchable.gridPosition.x, y))
                 {
@@ -555,7 +628,8 @@ public class MatchableGrid : GridSystem<Matchable>
         {
             RemoveObjectAtPosition(discoBall.gridPosition);
             object matchKey = new object();
-            for (int y = 0; y < Dimensions.y; y++)
+            // Only match within the play area
+            for (int y = 0; y < PLAY_AREA_HEIGHT; y++)
             {
                 for (int x = 0; x < Dimensions.x; x++)
                 {
@@ -590,10 +664,11 @@ public class MatchableGrid : GridSystem<Matchable>
             RemoveObjectAtPosition(matchable.gridPosition);
 
             // Calculate the bounds of the 5x5 area (radius of 2 from center)
+            // Clamp to play area boundaries
             int startX = Mathf.Max(0, matchable.gridPosition.x - radius);
             int endX = Mathf.Min(Dimensions.x - 1, matchable.gridPosition.x + radius);
             int startY = Mathf.Max(0, matchable.gridPosition.y - radius);
-            int endY = Mathf.Min(Dimensions.y - 1, matchable.gridPosition.y + radius);
+            int endY = Mathf.Min(PLAY_AREA_HEIGHT - 1, matchable.gridPosition.y + radius);
 
             object matchKey = new object();
             // Destroy all matchables in the area
@@ -640,15 +715,20 @@ public class MatchableGrid : GridSystem<Matchable>
     {
         List<Matchable> allMatchables = new List<Matchable>();
 
-        // Collect all matchables from the grid
-        for (int y = 0; y < Dimensions.y; y++)
+        // Collect all matchables from the play area only (not obstacles)
+        for (int y = 0; y < PLAY_AREA_HEIGHT; y++)
         {
             for (int x = 0; x < Dimensions.x; x++)
             {
                 if (!IsPositionEmpty(x, y))
                 {
-                    allMatchables.Add(GetObjectAtPosition(x, y));
-                    RemoveObjectAtPosition(new Vector2Int(x, y));
+                    Matchable matchable = GetObjectAtPosition(x, y);
+                    // Don't shuffle obstacles
+                    if (!matchable.isObstacle)
+                    {
+                        allMatchables.Add(matchable);
+                        RemoveObjectAtPosition(new Vector2Int(x, y));
+                    }
                 }
             }
         }
@@ -738,8 +818,8 @@ public class MatchableGrid : GridSystem<Matchable>
     {
         possibleMoves.Clear();
 
-        // Iterate through the grid looking for possible moves
-        for (int y = 0; y < Dimensions.y; y++)
+        // Iterate through the play area looking for possible moves
+        for (int y = 0; y < PLAY_AREA_HEIGHT; y++)
         {
             for (int x = 0; x < Dimensions.x; x++)
             {
@@ -820,6 +900,10 @@ public class MatchableGrid : GridSystem<Matchable>
 
     private List<Matchable> IsAPotentialMatch(Matchable toCheck, Vector2Int firstPosition, Vector2Int secondPosition, Vector2Int moveDirection)
     {
+        // Check that all positions are within play area bounds (not spawn buffer)
+        if (firstPosition.y >= PLAY_AREA_HEIGHT || secondPosition.y >= PLAY_AREA_HEIGHT)
+            return null;
+            
         if (IsWithinBounds(firstPosition) && !IsPositionEmpty(firstPosition)
             && IsWithinBounds(secondPosition) && !IsPositionEmpty(secondPosition)
             && GetObjectAtPosition(firstPosition).Idle && GetObjectAtPosition(secondPosition).Idle
@@ -830,6 +914,10 @@ public class MatchableGrid : GridSystem<Matchable>
             
             // Add the piece that would move to create the match
             Vector2Int targetPosition = toCheck.gridPosition + moveDirection;
+            
+            // Make sure target position is in play area
+            if (targetPosition.y >= PLAY_AREA_HEIGHT)
+                return null;
             
             // Simulate the swap: temporarily place toCheck at the target position
             // Then find all pieces that would match
@@ -851,7 +939,7 @@ public class MatchableGrid : GridSystem<Matchable>
             
             // Check in the direction of the match
             Vector2Int checkPos = targetPosition + checkDirection;
-            while (IsWithinBounds(checkPos) && !IsPositionEmpty(checkPos))
+            while (IsWithinBounds(checkPos) && checkPos.y < PLAY_AREA_HEIGHT && !IsPositionEmpty(checkPos))
             {
                 Matchable checkMatchable = GetObjectAtPosition(checkPos);
                 if (checkMatchable.Type == toCheck.Type && checkMatchable.Idle && !matchPieces.Contains(checkMatchable))
@@ -864,7 +952,7 @@ public class MatchableGrid : GridSystem<Matchable>
             
             // Check in the opposite direction
             checkPos = targetPosition - checkDirection;
-            while (IsWithinBounds(checkPos) && !IsPositionEmpty(checkPos))
+            while (IsWithinBounds(checkPos) && checkPos.y < PLAY_AREA_HEIGHT && !IsPositionEmpty(checkPos))
             {
                 Matchable checkMatchable = GetObjectAtPosition(checkPos);
                 if (checkMatchable.Type == toCheck.Type && checkMatchable.Idle && !matchPieces.Contains(checkMatchable))

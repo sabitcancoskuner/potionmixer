@@ -22,8 +22,6 @@ public class HintIndicator : Singleton<HintIndicator>
 
     public void CancelHint()
     {
-        Debug.Log($"CancelHint called, currentHintedMatchables count: {currentHintedMatchables?.Count ?? 0}");
-        
         if (autoHintCoroutine != null)
         {
             StopCoroutine(autoHintCoroutine);
@@ -36,7 +34,6 @@ public class HintIndicator : Singleton<HintIndicator>
             {
                 if (matchable != null && matchable.gameObject != null)
                 {
-                    Debug.Log($"Calling StopHintAnimation on {matchable.gameObject.name}");
                     matchable.StopHintAnimation();
                 }
                 else

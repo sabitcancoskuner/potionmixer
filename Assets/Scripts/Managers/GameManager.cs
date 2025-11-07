@@ -5,6 +5,7 @@ public class GameManager : Singleton<GameManager>
 {
     private MatchablePool matchablePool;
     private MatchableGrid matchableGrid;
+    private EffectManager visualEffectManager;
 
     [SerializeField] private Vector2Int gridDimensions;
 
@@ -12,6 +13,7 @@ public class GameManager : Singleton<GameManager>
     {
         matchablePool = (MatchablePool)MatchablePool.Instance;
         matchableGrid = (MatchableGrid)MatchableGrid.Instance;
+        visualEffectManager = EffectManager.Instance;
 
         StartCoroutine(Setup());
     }
@@ -19,6 +21,7 @@ public class GameManager : Singleton<GameManager>
     private IEnumerator Setup()
     {
         matchablePool.CreatePool(gridDimensions.x * gridDimensions.y * 2);
+        visualEffectManager.CreateEffectPools();
         matchableGrid.InitializeGrid(gridDimensions);
 
         yield return null;
